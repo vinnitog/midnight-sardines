@@ -2,4 +2,4 @@
 
 [Jogue grátis · Play free](https://vinnitog.github.io/midnight-sardines/)
 
-An HTML5 stealth puzzle by TechTogs Arcade. This repository hosts the free browser edition.
+An HTML5 stealth puzzle by TechTogs4Fun. This repository hosts the free browser edition.

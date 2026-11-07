@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#141220">
+<meta name="author" content="TechTogs4Fun">
 <meta name="description" content="Um gato. Uma galeria. Um apagão a cada quatro passos. Quebra-cabeça de furtividade para jogar no navegador.">
 <title>Sardinha à Meia-Noite</title>
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiNmZmNjNzQiLz48cGF0aCBkPSJtMTMgMTcgMTMgOWgxMmwxMy05djI0Yy03IDEyLTMxIDEyLTM4IDBaIiBmaWxsPSIjMjkyMTNiIi8+PHBhdGggZD0iTTIyIDM3aDZtOCAwaDYiIHN0cm9rZT0iI2ZmY2M3NCIgc3Ryb2tlLXdpZHRoPSIzIi8+PC9zdmc+">
@@ -317,6 +318,7 @@ globalThis.ArcadeArt = (() => {
 <script>
 document.addEventListener('DOMContentLoaded', () => {
 
+
 globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
 'use strict';
 
@@ -324,8 +326,9 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
   const $ = id => document.getElementById(id);
   const board = $('board'), dialog = $('dialog');
   const release = globalThis.RELEASE || {};
+  const portal = globalThis.SardinePortal;
   const full = Array.isArray(globalThis.SECRET_FILES);
-  const levels = [...CAMPAIGN, ...(full ? globalThis.SECRET_FILES : [])].map(Sardine.parse);
+  const levels = [...CAMPAIGN, ...(globalThis.SECRET_FILES || globalThis.PORTAL_CASES || [])].map(Sardine.parse);
   const texts = {
     series: ['O ARQUIVO DA MADRUGADA','THE MIDNIGHT FILES'],
     title: ['Sardinha à <em>Meia-Noite</em>','Midnight <em>Sardines</em>'],
@@ -382,18 +385,24 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
     board: ['Tabuleiro','Board'], move: ['Mover','Move'],
   };
   const fresh = { scores: {}, lang: /^pt/i.test(navigator.language) ? 0 : 1, muted: false, last: '01' };
+  const saveKey = portal ? 'midnight-sardines-gamepix-v1' : 'midnight-sardines-v1';
   let storage = true;
   let data;
   try {
-    const saved = JSON.parse(localStorage.getItem('midnight-sardines-v1') || '{}');
+    const saved = JSON.parse(localStorage.getItem(saveKey) || '{}');
     data = { ...fresh, ...saved, scores: { ...saved?.scores } };
     data.lang = data.lang === 0 ? 0 : 1;
   } catch { data = fresh; storage = false; }
   const save = () => {
-    try { localStorage.setItem('midnight-sardines-v1',JSON.stringify(data)); }
+    try { localStorage.setItem(saveKey,JSON.stringify(data)); }
     catch { storage = false; }
   };
   let level, state, history, dailyMode = false, hint = null, feedback = null, feedbackTone = '', optimum = 0, audio;
+  const betweenCases = portal?.connect(() => {
+    if (!audio) return;
+    void audio.close().catch(() => {});
+    audio = undefined;
+  });
   const tr = (key, args = {}) => texts[key][data.lang].replace(/\{(\w+)\}/g, (match, name) => args[name] ?? match);
   const boardDate = () => level.id.slice(1);
   const shareDate = new URLSearchParams(location.search).get('daily');
@@ -515,9 +524,10 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
   }
 
   function play(dir) {
-    if (state.status !== 'play') return;
+    if (state.status !== 'play' || portal?.paused()) return;
     const next = Sardine.step(level,state,dir);
     if (!next) { setFeedback('blocked'); render(); return; }
+    portal?.start();
     const before = state; history.push(before); state = next;
     hint = null; setFeedback(null);
     let note = dir === 4 ? 'wait' : 'move';
@@ -556,14 +566,19 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
     }
     renderFiles();
     const index = levels.indexOf(level), final = !dailyMode && index === levels.length - 1;
+    if (!dailyMode) portal?.complete(level.id);
+    const advance = next => {
+      if (betweenCases) void betweenCases().then(() => load(next));
+      else load(next);
+    };
     const actions = [];
-    if (!dailyMode && !final) actions.push([tr('next'),() => load(levels[index+1])]);
+    if (!dailyMode && !final) actions.push([tr('next'),() => advance(levels[index+1])]);
     if (final && !full && release.store) actions.push([tr('buy'),release.store]);
-    if (final) actions.push([tr('goDaily'),() => load(Sardine.daily(Sardine.dailyDate()))]);
-    if (dailyMode) actions.push([tr('share'),share]);
+    if (final) actions.push([tr('goDaily'),() => advance(Sardine.daily(Sardine.dailyDate()))]);
+    if (dailyMode && !portal) actions.push([tr('share'),share]);
     actions.push([tr('replay'),() => load(level)],[tr('review'),null]);
     const result = tr('result',{n:state.turn,best:optimum});
-    popup(state.turn === optimum ? tr('gold') : tr('clear'),final ? tr('archiveComplete') : tr('finish'),result + ' ' + tr(final ? (full ? 'capstone' : 'archivePitch') : 'escaped'),actions);
+    popup(state.turn === optimum ? tr('gold') : tr('clear'),final ? tr('archiveComplete') : tr('finish'),result + ' ' + tr(final ? (full || portal ? 'capstone' : 'archivePitch') : 'escaped'),actions);
   }
 
   function share() {
@@ -580,7 +595,7 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
     const text = document.title + ' | ' + info + achievement + (url ? '\n' + url.href : '');
     const area = document.createElement('textarea'); area.className = 'share-text'; area.rows = 3; area.readOnly = true;
     area.value = text; area.setAttribute('aria-label',tr('share'));
-    popup('TECHTOGS ARCADE',tr('share'),tr('sharePrompt'),[],area);
+    popup('TechTogs4Fun',tr('share'),tr('sharePrompt'),[],area);
     const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'primary'; copy.textContent = tr('copy');
     copy.addEventListener('click',async () => {
       try { await navigator.clipboard.writeText(text); copy.textContent = tr('copied'); }
@@ -603,7 +618,8 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
   $('daily').addEventListener('click',() => load(Sardine.daily(Sardine.dailyDate())));
   $('mute').addEventListener('click',() => { data.muted = !data.muted; save(); renderLabels(); });
   $('lang').addEventListener('click',() => { data.lang = 1 - data.lang; save(); renderLabels(); renderFiles(); render(); });
-  $('share').addEventListener('click',share);
+  $('share').hidden = Boolean(portal);
+  if (!portal) $('share').addEventListener('click',share);
   $('hint').addEventListener('click',() => {
     const path = Sardine.solve(level,state);
     if (!path?.length) { setFeedback('hintNone','danger'); render(); return; }
@@ -616,11 +632,11 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
   $('help').addEventListener('click',() => {
     const extra = document.createElement('div'); extra.className = 'legend';
     for (const line of texts.legend[data.lang]) { const item = document.createElement('span'); item.textContent = line; extra.append(item); }
-    popup('TECHTOGS ARCADE',tr('help'),tr('helpBody'),[[tr('close'),null]],extra);
+    popup('TechTogs4Fun',tr('help'),tr('helpBody'),[[tr('close'),null]],extra);
   });
   const keys = { arrowup:0,w:0,arrowright:1,d:1,arrowdown:2,s:2,arrowleft:3,a:3,' ':4 };
   document.addEventListener('keydown',e => {
-    if (dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.repeat || ['TEXTAREA','INPUT'].includes(e.target.tagName)) return;
+    if (portal?.paused() || dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.repeat || ['TEXTAREA','INPUT'].includes(e.target.tagName)) return;
     const key = e.key.toLowerCase();
     if (key === ' ' && ['BUTTON','A'].includes(e.target.tagName)) return;
     if (Object.hasOwn(keys,key)) { e.preventDefault(); play(keys[key]); }
@@ -629,6 +645,7 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
   });
 
   load(validDate(shareDate) ? Sardine.daily(shareDate) : levels.find(l => l.id === shareCase) || levels.find(l => l.id === data.last) || levels[0]);
+  void portal?.loaded();
 })();
 
 });
@@ -642,7 +659,7 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
 </head>
 <body>
   <header class="site">
-    <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="m6 9 7 5h6l7-5v13c-4 6-16 6-20 0Z" fill="currentColor"/><path d="M11 20h3m4 0h3" stroke="#222035" stroke-width="2"/></svg></span><span>TECHTOGS <b>ARCADE</b></span></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="m6 9 7 5h6l7-5v13c-4 6-16 6-20 0Z" fill="currentColor"/><path d="M11 20h3m4 0h3" stroke="#222035" stroke-width="2"/></svg></span><span>TechTogs<b>4Fun</b></span></div>
     <div class="site-actions">
       <button id="lang" type="button">EN</button>
       <button id="mute" type="button" aria-pressed="false">Som</button>
@@ -712,7 +729,7 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/"};
       </aside>
     </div>
   </main>
-  <footer><span>TECHTOGS ARCADE <b>✦</b> <span id="edition">EDIÇÃO DE NAVEGADOR</span></span><span id="privacy">Progresso salvo neste navegador.</span></footer>
+  <footer><span>TechTogs4Fun <b>✦</b> <span id="edition">EDIÇÃO DE NAVEGADOR</span></span><span id="privacy">Progresso salvo neste navegador.</span></footer>
 
   <dialog id="dialog">
     <div class="dialog-top"><p class="eyebrow" id="dialog-kicker"></p><form method="dialog"><button id="close-dialog" aria-label="Fechar">×</button></form></div>
