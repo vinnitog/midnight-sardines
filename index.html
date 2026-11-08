@@ -424,7 +424,8 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/","st
   });
   const tr = (key, args = {}) => texts[key][data.lang].replace(/\{(\w+)\}/g, (match, name) => args[name] ?? match);
   const boardDate = () => level.id.slice(1);
-  const shareDate = new URLSearchParams(location.search).get('daily');
+  const dailyParam = new URLSearchParams(location.search).get('daily');
+  const shareDate = dailyParam === 'today' ? Sardine.dailyDate() : dailyParam;
   const shareCase = new URLSearchParams(location.search).get('case');
   const validDate = date => /^20\d\d-\d\d-\d\d$/.test(date || '') &&
     !Number.isNaN(Date.parse(date)) && new Date(date).toISOString().slice(0,10) === date;
