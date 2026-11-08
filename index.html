@@ -213,6 +213,24 @@ globalThis.CAMPAIGN = [
     '#########','#P..#..E#','#.2.#.F.#','#.:!+...#','#F#.#3..#','#.......#','#########']],
 ].map(([id,pt,en,ptTip,enTip,rows]) => ({ id, title:[pt,en], tip:[ptTip,enTip], rows }));
 
+globalThis.BLACKOUT_CASES = [
+  {
+    id: 'A1', title: ['O corredor cego','The blind corridor'],
+    tip: ['Use os tapetes para esperar a câmera girar antes de atravessar.','Wait on the rugs for the camera to turn before crossing.'],
+    rows: ['#########','#P.0#...#','#:#.#.#.#','#.......#','#1#.#.#.#','#:....F.#','#F.#F1.E#','#########']
+  },
+  {
+    id: 'A2', title: ['O cofre do zelador','The caretaker’s vault'],
+    tip: ['A placa abre a rota de fuga. Planeje a travessia antes de sair do tapete.','The switch opens the escape route. Plan your crossing before leaving the rug.'],
+    rows: ['##########','#P.FF#...#','#.##.#:#.#','#.F.:.0.1#','#.#3##.#.#','#.#..!.#.#','#..:#...+#','#.#.F2##E#','##########']
+  },
+  {
+    id: 'A3', title: ['O cerco da meia-noite','The midnight lockdown'],
+    tip: ['A saída exige a placa e cinco sardinhas. Use o relógio para planejar cada retorno.','The exit needs the switch and five sardines. Use the clock to plan your return trips.'],
+    rows: ['###########','#P.1#F....#','#.#.:.###.#','#F#.#..2..#','#:..#.###.#','###.#.1.:F#','#.2..:#F#.#','#.###.#2F+#','#....!###E#','###########']
+  },
+];
+
 </script>
 <script>
 'use strict';
@@ -328,7 +346,8 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/","st
   const release = globalThis.RELEASE || {};
   const portal = globalThis.SardinePortal;
   const full = Array.isArray(globalThis.SECRET_FILES);
-  const levels = [...CAMPAIGN, ...(globalThis.SECRET_FILES || globalThis.PORTAL_CASES || [])].map(Sardine.parse);
+  const levels = [...CAMPAIGN, ...(globalThis.SECRET_FILES || globalThis.PORTAL_CASES || []), ...(portal ? [] : BLACKOUT_CASES)].map(Sardine.parse);
+  const blackoutIds = new Set(BLACKOUT_CASES.map(({ id }) => id));
   const texts = {
     series: ['O ARQUIVO DA MADRUGADA','THE MIDNIGHT FILES'],
     title: ['Sardinha à <em>Meia-Noite</em>','Midnight <em>Sardines</em>'],
@@ -575,7 +594,7 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/","st
     if (!dailyMode && !final) actions.push([tr('next'),() => advance(levels[index+1])]);
     if (final && !full && release.store) actions.push([tr('buy'),release.store]);
     if (final) actions.push([tr('goDaily'),() => advance(Sardine.daily(Sardine.dailyDate()))]);
-    if (dailyMode && !portal) actions.push([tr('share'),share]);
+    if (!portal && (dailyMode || blackoutIds.has(level.id))) actions.push([tr('share'),share]);
     actions.push([tr('replay'),() => load(level)],[tr('review'),null]);
     const result = tr('result',{n:state.turn,best:optimum});
     popup(state.turn === optimum ? tr('gold') : tr('clear'),final ? tr('archiveComplete') : tr('finish'),result + ' ' + tr(final ? (full || portal ? 'capstone' : 'archivePitch') : 'escaped'),actions);
@@ -588,7 +607,7 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/","st
       url.searchParams.delete('case');
       url.searchParams.delete('daily');
       if (dailyMode) url.searchParams.set('daily',boardDate());
-      else if (levels.indexOf(level) < CAMPAIGN.length) url.searchParams.set('case',level.id);
+      else if (levels.indexOf(level) < CAMPAIGN.length || blackoutIds.has(level.id)) url.searchParams.set('case',level.id);
     }
     const info = dailyMode ? tr('daily') + ' · ' + boardDate() : tr('case') + ' ' + level.id;
     const achievement = score(level.id) ? ' · ' + tr('best',{n:score(level.id)}) + (data.scores[level.id].gold ? ' ✦' : '') : '';
