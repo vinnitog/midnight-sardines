@@ -53,6 +53,12 @@ aside{display:grid;gap:10px}.side{padding:13px}.side strong{display:block;font-w
 .levels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin:9px 0}.levels button{position:relative;min-height:33px;background:#302740;border:1px solid var(--border);border-radius:7px;font-weight:800;font-size:12px}.levels button:hover{border-color:var(--violet)}.levels button[aria-current=true]{color:#24182b;background:var(--amber);border-color:var(--amber)}.levels .done::after{position:absolute;right:3px;top:0;content:'•';color:var(--cyan)}.levels .gold::after{content:'✦';color:var(--amber);font-size:9px}.levels [aria-current=true]::after{color:#48324c}
 .extras{display:flex;flex-wrap:wrap;gap:6px}.extras button{padding:7px 8px;font-size:12px}.extras span{color:var(--violet)}
 .offer{background:linear-gradient(145deg,#3b2a47,#272238);border-color:#735778}.offer strong{font-size:19px;margin-top:5px}.offer a,.dialog-actions a{display:inline-block;color:var(--amber);font-weight:900;font-size:13px;margin-top:7px;text-underline-offset:3px}
+.metrics{margin-top:14px;color:var(--muted);font-size:13px}
+.metrics summary{cursor:pointer;width:fit-content}
+.metrics summary:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+.metrics p{margin:8px 0}
+.metrics a{color:var(--amber);margin-right:8px}
+.metrics [role=status]{margin-left:8px}
 footer{display:flex;justify-content:space-between;gap:8px;color:var(--muted);padding:15px 0 19px;font-size:10px;letter-spacing:.05em}
 dialog{width:min(440px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;color:var(--ink);background:#28213a;border:1px solid #7c638e;border-radius:17px;padding:19px 21px;box-shadow:0 24px 100px #080611}
 dialog::backdrop{background:#0b0815b8;backdrop-filter:blur(3px)}.dialog-top{display:flex;align-items:center;justify-content:space-between;gap:10px}.dialog-top button{background:#382c4b;border:1px solid var(--border);border-radius:8px;width:34px;height:34px;font-size:21px;line-height:1}dialog h2{font-size:32px;letter-spacing:-.04em;margin:8px 0}dialog p:not(.eyebrow){font-size:14px;color:var(--muted);line-height:1.55}.dialog-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:15px}.dialog-actions .primary{color:#261b32;background:var(--amber);border-color:var(--amber)}.dialog-actions a{margin:0}.legend{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px}.legend span{padding:6px 8px;border-radius:6px;background:#352948;font-size:12px}.share-text{width:100%;margin-top:10px;background:#191627;color:var(--ink);padding:8px;border:1px solid var(--border);resize:vertical}
@@ -337,13 +343,107 @@ globalThis.ArcadeArt = (() => {
 document.addEventListener('DOMContentLoaded', () => {
 
 
-globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/","store":"https://vinnitogs.itch.io/midnight-sardines"};
+'use strict';
+
+globalThis.SardineMetrics = (() => {
+  const sources = ['daily-games-to-play', 'todays-dailies', 'dlegameshub', 'reddit', 'bluesky', 'itch', 'qa'];
+  const referrers = {
+    'dailygamestoplay.com': 'daily-games-to-play',
+    'todaysdailies.com': 'todays-dailies',
+    'dlegameshub.com': 'dlegameshub',
+    'reddit.com': 'reddit',
+    'old.reddit.com': 'reddit',
+    'bsky.app': 'bluesky',
+    'itch.io': 'itch',
+    'vinnitogs.itch.io': 'itch'
+  };
+  const labels = [
+    {
+      title: 'Medição opcional', on: 'Permitir medição', off: 'Parar medição', active: 'Medição ativada.',
+      info: 'Se permitir, contamos aberturas, primeiras jogadas e cliques na oferta por canal. O contador não guarda identificadores nem usa cookies. O Google pode processar o IP para receber a conexão.',
+      privacy: 'Privacidade do Google'
+    },
+    {
+      title: 'Optional measurement', on: 'Allow measurement', off: 'Stop measurement', active: 'Measurement on.',
+      info: 'If you allow it, we count opens, first moves and offer clicks by channel. The counter stores no identifiers and uses no cookies. Google may process the IP address to receive the request.',
+      privacy: 'Google privacy policy'
+    }
+  ];
+
+  function sourceForPage() {
+    const label = new URLSearchParams(location.search).get('src');
+    if (sources.includes(label)) return label;
+    if (!document.referrer) return 'unknown';
+    const host = new URL(document.referrer).hostname.replace(/^www\./, '');
+    return Object.hasOwn(referrers, host) ? referrers[host] : 'unknown';
+  }
+
+  function connect(endpoint, store) {
+    if (!endpoint || !store || location.protocol !== 'https:') return;
+    const source = sourceForPage();
+    const sent = new Set();
+    let enabled = false;
+    let languageIndex = 0;
+
+    const panel = document.createElement('details');
+    panel.className = 'side metrics';
+    panel.innerHTML = '<summary></summary><p></p><a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer"></a> <button type="button"></button><span role="status"></span>';
+    document.querySelector('main').append(panel);
+    const summary = panel.querySelector('summary');
+    const info = panel.querySelector('p');
+    const privacy = panel.querySelector('a');
+    const button = panel.querySelector('button');
+    const status = panel.querySelector('[role="status"]');
+
+    function language(index) {
+      languageIndex = index;
+      const copy = labels[index];
+      summary.textContent = copy.title;
+      info.textContent = copy.info;
+      privacy.textContent = copy.privacy;
+      button.textContent = enabled ? copy.off : copy.on;
+      status.textContent = enabled ? copy.active : '';
+    }
+
+    function record(event) {
+      if (!enabled || sent.has(event)) return;
+      sent.add(event);
+      void fetch(endpoint, {
+        method: 'POST',
+        mode: 'no-cors',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        keepalive: true,
+        body: event + ':' + source
+      }).catch(() => {});
+    }
+
+    button.addEventListener('click', () => {
+      enabled = !enabled;
+      language(languageIndex);
+      record('open');
+    });
+
+    function recordOffer(event) {
+      if (event.type === 'auxclick' && event.button !== 1) return;
+      if (event.target.closest('a[href]')?.href === store) record('offer');
+    }
+    document.addEventListener('click', recordOffer);
+    document.addEventListener('auxclick', recordOffer);
+    return { language, start: () => record('start') };
+  }
+
+  return { connect };
+})();
+
+globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/","store":"https://vinnitogs.itch.io/midnight-sardines","metrics":"https://script.google.com/macros/s/AKfycbzdpM_S51vjGAPnpCBHViwmIpXVGhWAE4RzHsoNcxTFWz2J8bAzkMi76uwpBK_CVqDk9A/exec"};
 'use strict';
 
 (() => {
   const $ = id => document.getElementById(id);
   const board = $('board'), dialog = $('dialog');
   const release = globalThis.RELEASE || {};
+  const metrics = globalThis.SardineMetrics?.connect(release.metrics, release.store);
   const portal = globalThis.SardinePortal;
   const full = Array.isArray(globalThis.SECRET_FILES);
   const levels = [...CAMPAIGN, ...(globalThis.SECRET_FILES || globalThis.PORTAL_CASES || []), ...(portal ? [] : BLACKOUT_CASES)].map(Sardine.parse);
@@ -457,6 +557,7 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/","st
 
   function renderLabels() {
     document.documentElement.lang = data.lang ? 'en' : 'pt-BR';
+    metrics?.language(data.lang);
     $('title').innerHTML = tr('title');
     document.title = $('title').textContent;
     $('series').innerHTML = tr('series') + ' <span>✦</span> VOL. 01';
@@ -547,6 +648,7 @@ globalThis.RELEASE = {"play":"https://vinnitog.github.io/midnight-sardines/","st
     if (state.status !== 'play' || portal?.paused()) return;
     const next = Sardine.step(level,state,dir);
     if (!next) { setFeedback('blocked'); render(); return; }
+    metrics?.start();
     portal?.start();
     const before = state; history.push(before); state = next;
     hint = null; setFeedback(null);
